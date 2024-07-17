@@ -183,31 +183,31 @@ go run main.go
 1. 构建 Docker 镜像
 
 ```bash
-docker build -t sensitive-service .
+make docker-build
 ```
 
-2. 运行 Docker 容器
+2. 推送 Docker 镜像到仓库
 
 ```bash
-docker run -d -p 8080:8080 --name sensitive-service sensitive-service
+make docker-push
 ```
 
-3. 停止 Docker 容器
+3. 运行 Docker 容器
 
 ```bash
-docker stop sensitive-service
+make docker-run
 ```
 
-4. 重启 Docker 容器
+4. 停止 Docker 容器
 
 ```bash
-docker restart sensitive-service
+make docker-stop
 ```
 
-5. 删除 Docker 容器
+5. 重启 Docker 容器
 
 ```bash
-docker rm sensitive-service
+make docker-restart
 ```
 
 ## 贡献
