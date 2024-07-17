@@ -293,7 +293,7 @@ func saveTablesToFile() error {
 		return err
 	}
 
-	return ioutil.WriteFile(dataFilePath, fileData, 0644)
+	return os.WriteFile(dataFilePath, fileData, 0644)
 }
 
 func loadTablesFromFile() error {
