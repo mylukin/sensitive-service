@@ -20,9 +20,13 @@ type Table struct {
 	Modified time.Time
 }
 
-var tables = make(map[string]*Table)
-var mutex = &sync.Mutex{}
-var dataFilePath = "tables_data.json"
+var (
+	tables       = make(map[string]*Table)
+	mutex        = &sync.Mutex{}
+	dataFilePath = "tables_data.json"
+)
+
+const globalTableName = "*"
 
 func main() {
 	loadTablesFromFile()
@@ -96,12 +100,16 @@ func filterHandler(c echo.Context) error {
 
 	mutex.Lock()
 	tbl, exists := tables[table]
+	globalTbl, globalExists := tables[globalTableName]
 	mutex.Unlock()
 
 	if !exists {
 		return c.JSON(http.StatusNotFound, map[string]string{"error": "table not found"})
 	}
 
+	if globalExists {
+		text = globalTbl.Filter.Filter(text)
+	}
 	filtered := tbl.Filter.Filter(text)
 	return c.JSON(http.StatusOK, map[string]string{"filtered": filtered})
 }
@@ -117,6 +125,7 @@ func replaceHandler(c echo.Context) error {
 
 	mutex.Lock()
 	tbl, exists := tables[table]
+	globalTbl, globalExists := tables[globalTableName]
 	mutex.Unlock()
 
 	if !exists {
@@ -124,6 +133,9 @@ func replaceHandler(c echo.Context) error {
 	}
 
 	replacementRune := []rune(to)[0]
+	if globalExists {
+		text = globalTbl.Filter.Replace(text, replacementRune)
+	}
 	replaced := tbl.Filter.Replace(text, replacementRune)
 	return c.JSON(http.StatusOK, map[string]string{"replaced": replaced})
 }
@@ -138,12 +150,19 @@ func findInHandler(c echo.Context) error {
 
 	mutex.Lock()
 	tbl, exists := tables[table]
+	globalTbl, globalExists := tables[globalTableName]
 	mutex.Unlock()
 
 	if !exists {
 		return c.JSON(http.StatusNotFound, map[string]string{"error": "table not found"})
 	}
 
+	if globalExists {
+		found, word := globalTbl.Filter.FindIn(text)
+		if found {
+			return c.JSON(http.StatusOK, map[string]interface{}{"found": found, "word": word})
+		}
+	}
 	found, word := tbl.Filter.FindIn(text)
 	return c.JSON(http.StatusOK, map[string]interface{}{"found": found, "word": word})
 }
@@ -158,13 +177,18 @@ func findAllHandler(c echo.Context) error {
 
 	mutex.Lock()
 	tbl, exists := tables[table]
+	globalTbl, globalExists := tables[globalTableName]
 	mutex.Unlock()
 
 	if !exists {
 		return c.JSON(http.StatusNotFound, map[string]string{"error": "table not found"})
 	}
 
-	words := tbl.Filter.FindAll(text)
+	var words []string
+	if globalExists {
+		words = globalTbl.Filter.FindAll(text)
+	}
+	words = append(words, tbl.Filter.FindAll(text)...)
 	return c.JSON(http.StatusOK, map[string]interface{}{"words": words})
 }
 
@@ -178,12 +202,19 @@ func validateHandler(c echo.Context) error {
 
 	mutex.Lock()
 	tbl, exists := tables[table]
+	globalTbl, globalExists := tables[globalTableName]
 	mutex.Unlock()
 
 	if !exists {
 		return c.JSON(http.StatusNotFound, map[string]string{"error": "table not found"})
 	}
 
+	if globalExists {
+		valid, word := globalTbl.Filter.Validate(text)
+		if !valid {
+			return c.JSON(http.StatusOK, map[string]interface{}{"valid": valid, "word": word})
+		}
+	}
 	valid, word := tbl.Filter.Validate(text)
 	return c.JSON(http.StatusOK, map[string]interface{}{"valid": valid, "word": word})
 }
@@ -195,38 +226,46 @@ func monitorDictUpdates() {
 	for range ticker.C {
 		mutex.Lock()
 		for tableName, tbl := range tables {
-			resp, err := http.Head(tbl.DictURL)
-			if err != nil {
-				fmt.Printf("Failed to check dict for table %s: %v\n", tableName, err)
-				continue
-			}
-
-			lastModified := resp.Header.Get("Last-Modified")
-			if lastModified == "" {
-				continue
-			}
-
-			modifiedTime, err := time.Parse(http.TimeFormat, lastModified)
-			if err != nil {
-				fmt.Printf("Failed to parse Last-Modified header for table %s: %v\n", tableName, err)
-				continue
-			}
-
-			if modifiedTime.After(tbl.Modified) {
-				filter := sensitive.New()
-				err := filter.LoadNetWordDict(tbl.DictURL)
-				if err != nil {
-					fmt.Printf("Failed to reload dict for table %s: %v\n", tableName, err)
-					continue
-				}
-
-				tbl.Filter = filter
-				tbl.Modified = modifiedTime
-
-				fmt.Printf("Dict for table %s updated\n", tableName)
-			}
+			checkAndUpdateTableDict(tbl, tableName)
 		}
 		mutex.Unlock()
+	}
+}
+
+func checkAndUpdateTableDict(tbl *Table, tableName string) {
+	if tbl.DictURL == "" {
+		return
+	}
+
+	resp, err := http.Head(tbl.DictURL)
+	if err != nil {
+		fmt.Printf("Failed to check dict for table %s: %v\n", tableName, err)
+		return
+	}
+
+	lastModified := resp.Header.Get("Last-Modified")
+	if lastModified == "" {
+		return
+	}
+
+	modifiedTime, err := time.Parse(http.TimeFormat, lastModified)
+	if err != nil {
+		fmt.Printf("Failed to parse Last-Modified header for table %s: %v\n", tableName, err)
+		return
+	}
+
+	if modifiedTime.After(tbl.Modified) {
+		filter := sensitive.New()
+		err := filter.LoadNetWordDict(tbl.DictURL)
+		if err != nil {
+			fmt.Printf("Failed to reload dict for table %s: %v\n", tableName, err)
+			return
+		}
+
+		tbl.Filter = filter
+		tbl.Modified = modifiedTime
+
+		fmt.Printf("Dict for table %s updated\n", tableName)
 	}
 }
 
