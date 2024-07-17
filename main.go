@@ -29,6 +29,9 @@ func main() {
 	e.GET("/del", delHandler)
 	e.GET("/filter", filterHandler)
 	e.GET("/replace", replaceHandler)
+	e.GET("/findin", findInHandler)
+	e.GET("/findall", findAllHandler)
+	e.GET("/validate", validateHandler)
 
 	go monitorDictUpdates()
 
@@ -116,6 +119,66 @@ func replaceHandler(c echo.Context) error {
 	replacementRune := []rune(to)[0]
 	replaced := tbl.Filter.Replace(text, replacementRune)
 	return c.JSON(http.StatusOK, map[string]string{"replaced": replaced})
+}
+
+func findInHandler(c echo.Context) error {
+	table := c.QueryParam("table")
+	text := c.QueryParam("text")
+
+	if table == "" || text == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "table and text parameters are required"})
+	}
+
+	mutex.Lock()
+	tbl, exists := tables[table]
+	mutex.Unlock()
+
+	if !exists {
+		return c.JSON(http.StatusNotFound, map[string]string{"error": "table not found"})
+	}
+
+	found, word := tbl.Filter.FindIn(text)
+	return c.JSON(http.StatusOK, map[string]interface{}{"found": found, "word": word})
+}
+
+func findAllHandler(c echo.Context) error {
+	table := c.QueryParam("table")
+	text := c.QueryParam("text")
+
+	if table == "" || text == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "table and text parameters are required"})
+	}
+
+	mutex.Lock()
+	tbl, exists := tables[table]
+	mutex.Unlock()
+
+	if !exists {
+		return c.JSON(http.StatusNotFound, map[string]string{"error": "table not found"})
+	}
+
+	words := tbl.Filter.FindAll(text)
+	return c.JSON(http.StatusOK, map[string]interface{}{"words": words})
+}
+
+func validateHandler(c echo.Context) error {
+	table := c.QueryParam("table")
+	text := c.QueryParam("text")
+
+	if table == "" || text == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "table and text parameters are required"})
+	}
+
+	mutex.Lock()
+	tbl, exists := tables[table]
+	mutex.Unlock()
+
+	if !exists {
+		return c.JSON(http.StatusNotFound, map[string]string{"error": "table not found"})
+	}
+
+	valid, word := tbl.Filter.Validate(text)
+	return c.JSON(http.StatusOK, map[string]interface{}{"valid": valid, "word": word})
 }
 
 func monitorDictUpdates() {

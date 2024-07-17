@@ -9,6 +9,9 @@ Sensitive Service 是一个用于管理和过滤敏感词的 HTTP 服务，使�
 2. 删除词库表
 3. 查询文本中的敏感词
 4. 替换文本中的敏感词
+5. 检测文本中的敏感词
+6. 找到所有匹配的敏感词
+7. 验证文本是否合法
 
 ## 接口
 
@@ -82,6 +85,60 @@ curl -X GET "http://localhost:8080/filter?table=table1&text=你好吗？我支�
 
 ```bash
 curl -X GET "http://localhost:8080/replace?table=table1&text=你好吗？我支持习大大，他的名字叫做习近平&to=*"
+```
+
+### 检测敏感词
+
+检测文本中的敏感词。
+
+**请求**
+
+- 方法: GET
+- 路径: `/findin`
+- 参数:
+  - `table`: 表名称
+  - `text`: 需要检测的文本
+
+**示例**
+
+```bash
+curl -X GET "http://localhost:8080/findin?table=table1&text=你好吗？我支持习大大，他的名字叫做习近平"
+```
+
+### 找到所有匹配的敏感词
+
+找到文本中所有匹配的敏感词。
+
+**请求**
+
+- 方法: GET
+- 路径: `/findall`
+- 参数:
+  - `table`: 表名称
+  - `text`: 需要查询的文本
+
+**示例**
+
+```bash
+curl -X GET "http://localhost:8080/findall?table=table1&text=你好吗？我支持习大大，他的名字叫做习近平"
+```
+
+### 验证文本是否合法
+
+验证文本是否合法。
+
+**请求**
+
+- 方法: GET
+- 路径: `/validate`
+- 参数:
+  - `table`: 表名称
+  - `text`: 需要验证的文本
+
+**示例**
+
+```bash
+curl -X GET "http://localhost:8080/validate?table=table1&text=你好吗？我支持习大大，他的名字叫做习近平"
 ```
 
 ## 构建与运行
