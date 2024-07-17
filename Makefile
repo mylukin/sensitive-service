@@ -33,7 +33,7 @@ docker-pull:
 
 # 运行 Docker 容器
 docker-run:
-	docker run -d --name sensitive-service -p 8080:8080 $(IMAGE_NAME):latest
+	docker run -d --name sensitive-service -p 8080:8080 -v ./tables_data.json:/app/tables_data.json $(IMAGE_NAME):latest
 
 # 停止并移除 Docker 容器
 docker-stop:
