@@ -1,8 +1,11 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 
@@ -19,8 +22,11 @@ type Table struct {
 
 var tables = make(map[string]*Table)
 var mutex = &sync.Mutex{}
+var dataFilePath = "tables_data.json"
 
 func main() {
+	loadTablesFromFile()
+
 	e := echo.New()
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
@@ -34,6 +40,7 @@ func main() {
 	e.GET("/validate", validateHandler)
 
 	go monitorDictUpdates()
+	go saveTablesToFilePeriodically()
 
 	e.Logger.Fatal(e.Start(":8080"))
 }
@@ -220,5 +227,84 @@ func monitorDictUpdates() {
 			}
 		}
 		mutex.Unlock()
+	}
+}
+
+func saveTablesToFile() error {
+	mutex.Lock()
+	defer mutex.Unlock()
+
+	data := make(map[string]struct {
+		DictURL  string
+		Modified time.Time
+	})
+
+	for tableName, tbl := range tables {
+		data[tableName] = struct {
+			DictURL  string
+			Modified time.Time
+		}{
+			DictURL:  tbl.DictURL,
+			Modified: tbl.Modified,
+		}
+	}
+
+	fileData, err := json.MarshalIndent(data, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	return ioutil.WriteFile(dataFilePath, fileData, 0644)
+}
+
+func loadTablesFromFile() error {
+	mutex.Lock()
+	defer mutex.Unlock()
+
+	fileData, err := ioutil.ReadFile(dataFilePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+
+	data := make(map[string]struct {
+		DictURL  string
+		Modified time.Time
+	})
+
+	err = json.Unmarshal(fileData, &data)
+	if err != nil {
+		return err
+	}
+
+	for tableName, tblData := range data {
+		filter := sensitive.New()
+		err := filter.LoadNetWordDict(tblData.DictURL)
+		if err != nil {
+			fmt.Printf("Failed to load dict for table %s: %v\n", tableName, err)
+			continue
+		}
+
+		tables[tableName] = &Table{
+			DictURL:  tblData.DictURL,
+			Filter:   filter,
+			Modified: tblData.Modified,
+		}
+	}
+
+	return nil
+}
+
+func saveTablesToFilePeriodically() {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		err := saveTablesToFile()
+		if err != nil {
+			fmt.Printf("Failed to save tables to file: %v\n", err)
+		}
 	}
 }
